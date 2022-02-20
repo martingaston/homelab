@@ -1,0 +1,65 @@
+#!/bin/sh
+
+PREREQ=""
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+# shellcheck disable=SC1091
+. /scripts/functions
+
+AUTH_LIMIT=30
+ETHERNET="{{ ethernet }}"
+
+limit=${AUTH_LIMIT}
+
+# attempt to bring up ethernet connection
+ip link set "$ETHERNET" up
+printf "Waiting for ethernet connection (max %s seconds)" "$AUTH_LIMIT"
+while [ $limit -ge 0 ] && [ "$(ip link show "$ETHERNET" | awk '"/$ETHERNET/" && /LOWER_UP/' | wc -l)" -lt 1 ]
+do
+  sleep 1
+  printf "."
+  limit=$((limit - 1))
+done
+
+if [ "$(ip link show "$ETHERNET" | awk '"/$ETHERNET/" && /LOWER_UP/' | wc -l )" -gt 0 ]; then
+  log_success_msg "Ethernet connection $ETHERNET available, no need to setup WiFi..."
+  exit 0
+fi
+
+touch /tmp/wifi-configured
+
+# https://www.marcfargas.com/2017/12/enable-wireless-networks-in-debian-initramfs
+INTERFACE="{{ wlan }}"
+alias WPACLI='/sbin/wpa_cli -p/tmp/wpa_supplicant -i$INTERFACE'
+
+log_begin_msg "Starting WLAN connection"
+/sbin/wpa_supplicant  -i"$INTERFACE" -c/etc/wpa_supplicant.conf -P/run/initram-wpa_supplicant.pid -B -f /tmp/wpa_supplicant.log
+
+# Wait for AUTH_LIMIT seconds, then check the status
+limit=${AUTH_LIMIT}
+
+printf "Waiting for WLAN connection (max %s seconds)" "$AUTH_LIMIT"
+while [ $limit -ge 0 ] && [ "$(WPACLI status | grep wpa_state)" != "wpa_state=COMPLETED" ]
+do
+    sleep 1
+    printf "."
+    limit=$((limit - 1))
+done
+echo ""
+
+if [ "$(WPACLI status | grep wpa_state)" != "wpa_state=COMPLETED" ]; then
+  log_failure_msg "WLAN offline after timeout"
+  panic
+else
+  log_success_msg "WLAN online"
+fi

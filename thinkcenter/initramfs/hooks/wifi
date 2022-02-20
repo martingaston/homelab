@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+PREREQ=""
+prereqs()
+{
+    echo "${PREREQ}"
+}
+case "${1}" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# shellcheck disable=SC1091
+. /usr/share/initramfs-tools/hook-functions
+
+# copy necessary files to access network
+copy_exec /sbin/wpa_supplicant
+copy_exec /sbin/wpa_cli
+
+# copy configuration
+copy_file config /etc/initramfs-tools/wpa_supplicant.conf /etc/wpa_supplicant.conf

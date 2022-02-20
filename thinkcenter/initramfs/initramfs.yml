@@ -1,0 +1,59 @@
+---
+- name: initramfs-wireless
+  hosts: all
+  become: yes
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: install dropbear & busybox
+      ansible.builtin.apt:
+        pkg:
+          - dropbear
+          - busybox
+        state: present
+    - name: enable busybox in /etc/initramfs-tools/initramfs.conf
+      notify: update initramfs
+      ansible.builtin.lineinfile:
+        path: /etc/initramfs-tools/initramfs.conf
+        regexp: "^BUSYBOX="
+        line: BUSYBOX=y
+    - name: set dropbear to listen on port 2222
+      notify: update initramfs
+      ansible.builtin.lineinfile:
+        path: /etc/dropbear-initramfs/config
+        regexp: '^DROPBEAR_OPTIONS='
+        line: DROPBEAR_OPTIONS="-p 2222"
+        insertafter: '^#DROPBEAR_OPTIONS='
+    - name: copy hooks to /etc/initramfs-tools/hooks/
+      notify: update initramfs
+      ansible.builtin.copy:
+        src: hooks/
+        dest: /etc/initramfs-tools/hooks/
+        mode: preserve
+    - name: copy modules to /etc/initramfs-tools/modules
+      notify: update initramfs
+      ansible.builtin.copy:
+        src: modules
+        dest: /etc/initramfs-tools/modules
+        mode: preserve
+    - name: copy wpa_supplicant.conf
+      notify: update initramfs
+      ansible.builtin.template:
+        src: wpa_supplicant.conf.j2
+        dest: /etc/initramfs-tools/wpa_supplicant.conf
+        mode: preserve
+    - name: copy enable_wifi script
+      notify: update initramfs
+      ansible.builtin.template:
+        src: scripts/init-premount/enable_wifi
+        dest: /etc/initramfs-tools/scripts/init-premount/enable_wifi
+        mode: preserve
+    - name: copy disable_wifi script
+      notify: update initramfs
+      ansible.builtin.copy:
+        src: scripts/init-bottom/disable_wifi
+        dest: /etc/initramfs-tools/scripts/init-bottom/disable_wifi
+        mode: preserve
+  handlers:
+    - name: update initramfs
+      command: update-initramfs -u -k all

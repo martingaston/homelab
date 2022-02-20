@@ -1,0 +1,54 @@
+#!/bin/sh
+
+# dropbear is in /usr/share/initramfs-tools/scripts/init-bottom
+# but it looks like the /etc/share/initramfs-tools/scripts get  moved into the same flow by initramfs-tools
+PREREQ="dropbear"
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+# shellcheck disable=SC1091
+. /scripts/functions
+
+# https://bugs.launchpad.net/ubuntu/+source/dropbear/+bug/1813394
+# https://askubuntu.com/questions/1250133/interface-ip-conflict-after-dropbear-initramfs-boot
+log_begin_msg "Deleting network config that could clash with netplan..."
+rm -f /run/net-*.conf
+rm -f /run/netplan/*.yaml
+log_end_msg
+
+log_begin_msg "Checking for wifi configuration..."
+if [ ! -f /tmp/wifi-configured ]; then
+    echo "No wifi configuration set"
+    log_end_msg
+    exit 0
+else
+    echo "wifi configuration found"
+    log_end_msg
+fi
+
+log_begin_msg "Cleaning up wifi connection..."
+
+FILE="/run/initram-wpa_supplicant.pid"
+if [ -f $FILE ]; then
+    log_begin_msg "Killing wpa_supplicant..."
+    kill "$(cat /run/initram-wpa_supplicant.pid)"
+    log_end_msg
+fi
+
+# these are probably overkill but I figure it can't hurt to put everything back like we found it!
+rm -rf /tmp/wpa_supplicant
+rm -f /run/initram-wpa_supplicant.pid
+rmmod iwlmvm iwlwifi
+
+log_end_msg
+
+rm -f /tmp/wifi-configured
